@@ -1,3 +1,4 @@
+
 /**
  * This class is to write a Command Line Interface (CLI) program called TextBuddy
  * using Java to manipulate text in a file. 
@@ -22,6 +23,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Scanner;
 
 public class TextBuddy {
@@ -31,32 +33,36 @@ public class TextBuddy {
 	private static final String MESSAGE_INVALID_FORMAT = "invalid command format: %1$s";
 	private static final String MESSAGE_ADDED = "added to %1$s: \"%2$s\"";
 	private static final String MESSAGE_DELETE = "deleted from %1$s: \"%2$s\"";
+	private static final String MESSAGE_DELETE_FAIL = "Line %1$s does not exist in %2$s";
 	private static final String MESSAGE_DISPLAY = "%1$s. %2$s";
 	private static final String MESSAGE_CLEAR = "all content deleted from %1$s";
 	private static final String MESSAGE_EMPTY = "%1$s is empty";
 	private static final String MESSAGE_ERROR = "Error: %s\n";
-	
+	private static final String MESSAGE_SORTED = "Contents in %1$s have been sorted";
+	private static final String MESSAGE_SORTED_FAIL = "%1$s has nothing to sort";
+	private static final String MESSAGE_SEARCH_FAIL = "\"%1$s\" cannot be found in %2$s";
+
 	// These are the possible command types
-	enum COMMAND_TYPE {
-		ADD_TEXT, DISPLAY_TEXT, DELETE_TEXT, CLEAR_TEXT, INVALID, EXIT
+	enum CommandTypes {
+		ADD_TEXT, DISPLAY_TEXT, DELETE_TEXT, CLEAR_TEXT, INVALID, EXIT, SORT, SEARCH
 	}
-	
+
 	// This is the correct number of parameters for delete command
 	private static final int PARAM_SIZE_FOR_DELETE_TEXT = 1;
-	
+
 	// This is the position where the parameters will appear in a command
 	private static final int PARAM_POSITION_DELETE_VALUE = 0;
-	
+
 	// This is the indication of empty storage
 	private static final int STORAGE_EMPTY_VALUE = 0;
-	
+
 	private static final String DEFAULT_FILE = "default.txt";
-	
-	public static String fileName;
+
+	public static String fileName = DEFAULT_FILE;
 	private static ArrayList<String> storages = new ArrayList<String>();
-	
+
 	private static Scanner scanner = new Scanner(System.in);
-	
+
 	public static void main(String[] args) throws IOException {
 		String msg = getFileName(args);
 		showToUser(msg);
@@ -67,45 +73,60 @@ public class TextBuddy {
 			showToUser(feedback);
 		}
 	}
-	
-	private static String getFileName(String[] input) throws IOException {
-		
-		if(input.length != 0) {
+
+	private static String getFileName(String[] input) {
+		if (input.length != 0) {
 			fileName = input[0];
-			
+
 			File getFile = new File(fileName);
-			if(getFile.exists()) {
-				BufferedReader inputFile = new BufferedReader(new FileReader(fileName));
-				readFromFile(inputFile);
+			if (getFile.exists()) {
+				openingFile();
 			} else {
-				getFile.createNewFile();
+				try {
+					getFile.createNewFile();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
 			}
-		} else {
-			fileName = DEFAULT_FILE;
 		}
 		return String.format(MESSAGE_WELCOME, fileName);
 	}
-	
-	private static void readFromFile(BufferedReader file) throws FileNotFoundException, IOException {
-		String content;
-		while((content = file.readLine()) != null) {
-			storages.add(content);
+
+	private static void openingFile() {
+		BufferedReader inputFile;
+		try {
+			inputFile = new BufferedReader(new FileReader(fileName));
+			readFromFile(inputFile);
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
 		}
 	}
-	
+
+	private static void readFromFile(BufferedReader file) {
+		String content;
+		try {
+			while ((content = file.readLine()) != null) {
+				storages.add(content);
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
 	private static void showToUser(String text) {
 		System.out.println(text);
 	}
-	
-	private static String executeCommand(String userCommand) {
-		if(userCommand.trim().equals(""))
+
+	public static String executeCommand(String userCommand) {
+		if (userCommand.trim().equals("")) {
 			return String.format(MESSAGE_INVALID_FORMAT, userCommand);
-		
+		}
+
 		String commandTypeString = getFirstWord(userCommand);
-		
-		COMMAND_TYPE commandType = determineCommandType(commandTypeString);
-		
-		switch(commandType) {
+
+		CommandTypes commandType = determineCommandType(commandTypeString);
+
+		switch (commandType) {
 		case ADD_TEXT:
 			return addText(userCommand);
 		case DELETE_TEXT:
@@ -118,11 +139,15 @@ public class TextBuddy {
 			return String.format(MESSAGE_INVALID_FORMAT, userCommand);
 		case EXIT:
 			exitProgram();
+		case SORT:
+			return sortText();
+		case SEARCH:
+			return searchText(userCommand);
 		default:
 			throw new Error("Unrecognized command type");
 		}
 	}
-	
+
 	/**
 	 * This operation determines which of the supported command types the user
 	 * wants to perform
@@ -130,103 +155,167 @@ public class TextBuddy {
 	 * @param commandTypeString
 	 *            is the first word of the user command
 	 */
-	private static COMMAND_TYPE determineCommandType(String commandTypeString) {
-		if(commandTypeString == null)
+	private static CommandTypes determineCommandType(String commandTypeString) {
+		if (commandTypeString == null) {
 			throw new Error("command type string cannot be null");
-		
-		if(commandTypeString.equalsIgnoreCase("add")) {
-			return COMMAND_TYPE.ADD_TEXT;
+		}
+
+		if (commandTypeString.equalsIgnoreCase("add")) {
+			return CommandTypes.ADD_TEXT;
 		} else if (commandTypeString.equalsIgnoreCase("delete")) {
-			return COMMAND_TYPE.DELETE_TEXT;
+			return CommandTypes.DELETE_TEXT;
 		} else if (commandTypeString.equalsIgnoreCase("display")) {
-			return COMMAND_TYPE.DISPLAY_TEXT;
+			return CommandTypes.DISPLAY_TEXT;
 		} else if (commandTypeString.equalsIgnoreCase("clear")) {
-			return COMMAND_TYPE.CLEAR_TEXT;
+			return CommandTypes.CLEAR_TEXT;
 		} else if (commandTypeString.equalsIgnoreCase("exit")) {
-			return COMMAND_TYPE.EXIT;
+			return CommandTypes.EXIT;
+		} else if (commandTypeString.equalsIgnoreCase("sort")) {
+			return CommandTypes.SORT;
+		} else if (commandTypeString.equalsIgnoreCase("search")) {
+			return CommandTypes.SEARCH;
 		} else {
-			return COMMAND_TYPE.INVALID;
+			return CommandTypes.INVALID;
 		}
 	}
-	
-	private static String addText(String userCommand) {
+
+	private static String sortText() {
+		if (storages.size() == 0) {
+			return String.format(MESSAGE_SORTED_FAIL, fileName);
+		}
+
+		Collections.sort(storages, String.CASE_INSENSITIVE_ORDER);
+		return String.format(MESSAGE_SORTED, fileName);
+	}
+
+	private static String searchText(String userCommand) {
+		String searchValue = removeFirstWord(userCommand).trim();
 		
+		if(storages.isEmpty()) {
+			return String.format(MESSAGE_SEARCH_FAIL, searchValue, fileName);
+		}
+		
+		String searchOutput = getSearchOutput(searchValue);
+
+		if (searchOutput.equals("")) {
+			return String.format(MESSAGE_SEARCH_FAIL, searchValue, fileName);
+		}
+		return searchOutput;
+	}
+
+	private static String getSearchOutput(String searchValue) {
+		ArrayList<String> searchResult = getSearchResult(searchValue);
+		String searchOutput = "";
+
+		for (int i = 0; i < searchResult.size(); i++) {
+			String currentMsg = String.format(MESSAGE_DISPLAY, i + 1, searchResult.get(i));
+			searchOutput += currentMsg;
+			if (i != searchResult.size() - 1) {
+				searchOutput += "\n";
+			}
+		}
+		return searchOutput;
+	}
+
+	private static ArrayList<String> getSearchResult(String searchValue) {
+		ArrayList<String> results = new ArrayList<String>();
+
+		for (int i = 0; i < storages.size(); i++) {
+			String text = storages.get(i);
+			if (text.toLowerCase().contains(searchValue.toLowerCase())) {
+				results.add(text);
+			}
+		}
+		return results;
+	}
+
+	private static String addText(String userCommand) {
 		String textValue = removeFirstWord(userCommand);
 		storages.add(textValue);
-		
+
 		return String.format(MESSAGE_ADDED, fileName, textValue);
 	}
-	
+
 	/**
-	 * This operation finds the value to be deleted. 
+	 * This operation finds the value to be deleted.
+	 * 
 	 * @param userCommand
-	 * @return
+	 * @return message in String
 	 */
 	private static String deleteText(String userCommand) {
 		String[] parameters = splitParameters(removeFirstWord(userCommand));
-		
-		if(parameters.length != PARAM_SIZE_FOR_DELETE_TEXT) {
+
+		if (parameters.length != PARAM_SIZE_FOR_DELETE_TEXT) {
 			return String.format(MESSAGE_INVALID_FORMAT, userCommand);
 		}
-		
+
 		String deleteValue = parameters[PARAM_POSITION_DELETE_VALUE];
-		
-		if(!isPositiveNonZeroInt(deleteValue)) {
+
+		if (!isPositiveNonZeroInt(deleteValue)) {
 			return String.format(MESSAGE_INVALID_FORMAT, userCommand);
 		}
-		
+
+		if (!isValidIndex(deleteValue)) {
+			return String.format(MESSAGE_DELETE_FAIL, userCommand, fileName);
+		}
+
 		String deletedText = deleteTextAtPosition(deleteValue);
-		
+
 		return String.format(MESSAGE_DELETE, fileName, deletedText);
 	}
-	
+
 	private static String deleteTextAtPosition(String deleteValue) {
-		
-		int deleteIntValue = Integer.parseInt(deleteValue) - 1 ;
+
+		int deleteIntValue = Integer.parseInt(deleteValue) - 1;
 		String deleteText = storages.get(deleteIntValue);
 		storages.remove(deleteIntValue);
 		return deleteText;
 	}
-	
+
 	/**
-	 * This operation display the data that are saved in the Arraylist of the program
+	 * This operation display the data that are saved in the Arraylist of the
+	 * program
 	 */
 	private static String displayText() {
-		
-		if(storages.size() == STORAGE_EMPTY_VALUE) {
+
+		if (storages.size() == STORAGE_EMPTY_VALUE) {
 			return String.format(MESSAGE_EMPTY, fileName);
 		}
-		
+
+		String msgToDisplay = getStringText();
+		return msgToDisplay;
+	}
+	
+	private static String getStringText() {
 		String printingMsg = "";
-		
+
 		for (int i = 0; i < storages.size(); i++) {
-			String currentMsg = String.format(MESSAGE_DISPLAY, i+1, storages.get(i));
+			String currentMsg = String.format(MESSAGE_DISPLAY, i + 1, storages.get(i));
 			printingMsg += currentMsg;
-			if(i != storages.size()-1){
+			if (i != storages.size() - 1) {
 				printingMsg += "\n";
 			}
 		}
-		
 		return printingMsg;
 	}
-	
+
 	/**
-	 * This operation clear the whole data being saved in the Arraylist of the program
+	 * This operation clear the whole data being saved in the Arraylist of the
+	 * program
+	 * @return cleared message
 	 */
 	private static String clearText() {
-		
 		storages.clear();
 		return String.format(MESSAGE_CLEAR, fileName);
 	}
-	
+
 	/**
 	 * This operation overwrites the content of the file and exit the program
 	 */
-	private static void exitProgram(){
+	private static void exitProgram() {
 		try {
-			PrintWriter out = new PrintWriter(fileName,"UTF-8");
-			
-			for(int i = 0; i < storages.size(); i++){
+			PrintWriter out = new PrintWriter(fileName, "UTF-8");
+			for (int i = 0; i < storages.size(); i++) {
 				out.println(storages.get(i));
 			}
 			out.close();
@@ -235,7 +324,7 @@ public class TextBuddy {
 			System.out.printf(MESSAGE_ERROR, e.getMessage());
 		}
 	}
-	
+
 	private static String getFirstWord(String userCommand) {
 		String commandTypeString = userCommand.trim().split("\\s+")[0];
 		return commandTypeString;
@@ -244,19 +333,27 @@ public class TextBuddy {
 	private static String removeFirstWord(String userCommand) {
 		return userCommand.replace(getFirstWord(userCommand), "").trim();
 	}
-	
+
 	private static String[] splitParameters(String commandParametersString) {
 		String[] parameters = commandParametersString.trim().split("\\s+");
 		return parameters;
 	}
-	
-	private static boolean isPositiveNonZeroInt(String s){
+
+	private static boolean isPositiveNonZeroInt(String deletingValue) {
 		try {
-			int intValue = Integer.parseInt(s);
+			int intValue = Integer.parseInt(deletingValue);
 			// return turn if intValue is greater than 0
-			return (intValue > 0 ? true : false);
+			return (intValue > 0);
 		} catch (NumberFormatException nfe) {
 			return false;
 		}
+	}
+
+	private static boolean isValidIndex(String deleteValue) {
+		int intValue = Integer.parseInt(deleteValue);
+		if (intValue >= storages.size()) {
+			return false;
+		}
+		return true;
 	}
 }
